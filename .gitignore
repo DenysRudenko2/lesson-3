@@ -13,6 +13,7 @@ venv/
 *.pt
 *.pth
 *.onnx
+!model.pt
 checkpoints/
 runs/
 wandb/

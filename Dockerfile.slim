@@ -1,0 +1,44 @@
+# Dockerfile.slim — multi-stage, CPU-only PyTorch, minimal runtime.
+# Stage 1 builds wheels into a venv; stage 2 ships only the venv + app code.
+
+# ---------- Stage 1: builder ------------------------------------------------
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# Build deps for any wheel that needs compilation; not carried into runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# CPU-only wheels avoid pulling ~2GB of CUDA libraries.
+RUN pip install --upgrade pip \
+ && pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+        torch==2.3.1+cpu torchvision==0.18.1+cpu pillow==10.4.0
+
+# ---------- Stage 2: runtime ------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+# Non-root user for inference.
+RUN useradd --create-home --shell /usr/sbin/nologin app
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --chown=app:app model.pt imagenet_classes.json inference.py ./
+
+USER app
+
+ENTRYPOINT ["python", "inference.py"]
+CMD ["--help"]

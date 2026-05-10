@@ -1,0 +1,26 @@
+# Dockerfile.fat — intentionally "heavy" image for comparison.
+# Base: full Ubuntu, default GPU-enabled torch wheel, build toolchain kept around.
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# A deliberately broad system layer (compilers, dev headers, debugging tools).
+RUN apt-get update && apt-get install -y \
+        python3 python3-pip python3-dev \
+        build-essential gcc g++ make cmake git curl wget \
+        ca-certificates libjpeg-dev zlib1g-dev libpng-dev \
+        vim nano htop tree unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Default torch wheel pulls CUDA libs (~2-3GB) — perfect for a fat image.
+RUN pip3 install --upgrade pip \
+ && pip3 install torch==2.3.1 torchvision==0.18.1 pillow==10.4.0 Django==5.0.6
+
+COPY model.pt imagenet_classes.json inference.py ./
+
+ENTRYPOINT ["python3", "inference.py"]
+CMD ["--help"]

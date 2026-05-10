@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+__pycache__
+*.pyc
+*.pyo
+*.log
+.venv
+venv
+.idea
+.vscode
+README.md
+report.md
+comparison.txt
+install_dev_tools.sh
+install.log
+samples

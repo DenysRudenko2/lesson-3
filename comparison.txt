@@ -1,0 +1,56 @@
+Образ Fat vs Slim — короткий конспект (повний розбір — у report.md)
+
+Збірка:
+    docker build -f Dockerfile.fat  -t mlops-lesson3:fat  .
+    docker build -f Dockerfile.slim -t mlops-lesson3:slim .
+
+Перегляд:
+    docker images mlops-lesson3
+    docker history mlops-lesson3:fat
+    docker history mlops-lesson3:slim
+
+Реальні числа з цієї збірки (Docker 29.4.0, Linux x86_64):
+
+    Образ                          База                  Розмір     Шари
+    -----------------------------  --------------------  ---------  ----
+    mlops-lesson3:fat              ubuntu:22.04          14.9 ГБ    12
+    mlops-lesson3:slim             python:3.11-slim       1.48 ГБ   18
+
+Куди йде розмір fat-образу:
+    8.24 ГБ  pip3 install torch==2.3.1 torchvision==0.18.1 ... (CUDA-колеса + кеш pip)
+     521 МБ  apt-get install build-essential, dev-заголовки, vim, htop, git, ...
+      88 МБ  rootfs ubuntu:22.04
+      14 МБ  код застосунку + model.pt + classes JSON
+
+Куди йде розмір slim-образу:
+    1.0  ГБ  /opt/venv скопійований з builder (CPU-only torch + torchvision + pillow)
+     138 МБ  шари встановлення python:3.11
+      87 МБ  rootfs debian:trixie-slim
+      14 МБ  код застосунку + model.pt + classes JSON
+
+Обидва образи дають однакові передбачення для samples/dog.jpg:
+    1. Samoyed     39.75%
+    2. Pomeranian   4.31%
+    3. Arctic fox   3.60%
+
+Що є у fat-образі і чого немає у slim-образі:
+    * компілятори / dev-заголовки (build-essential, python3-dev, libjpeg-dev, ...)
+    * CLI-інструменти (git, curl, wget, vim, nano, htop, tree, unzip)
+    * повний CUDA runtime, що тягне дефолтний wheel torch==2.3.1
+    * кеш wheel-ів pip (~/.cache/pip)
+    * Django (не використовується під час inference)
+    * запуск від користувача root
+
+Чому slim-образ виходить маленьким:
+    * база python:3.11-slim
+    * multi-stage: build-essential живе лише у builder-стадії
+    * torch==2.3.1+cpu / torchvision==0.18.1+cpu (без CUDA)
+    * PIP_NO_CACHE_DIR=1, virtualenv копіюється одним шаром
+    * запуск від не-root користувача
+
+Подальші ідеї оптимізації:
+    * distroless/python3 або scratch + статичний libtorch
+    * inference через libtorch у C++ (без Python взагалі)
+    * конвертація в ONNX, запуск через onnxruntime (~50 МБ)
+    * динамічна квантизація MobileNetV2 (~4× менші ваги)
+    * docker buildx cache mounts, щоб не запікати кеш pip у шари
